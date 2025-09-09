@@ -437,6 +437,10 @@ submit_request(HttpClient *client, const Headers &headers, Request *req) {
     build_headers.emplace_back(kv.name, kv.value, kv.no_index);
   }
 
+  build_headers.erase(std::remove_if(std::ranges::begin(build_headers), std::ranges::end(build_headers), [](auto &&nv) { return !nv.value.length(); }), std::ranges::end(build_headers));
+  for (auto &&nv: build_headers) {
+    if (nv.value == " ") nv.value = "";
+  }
   std::ranges::stable_partition(
     build_headers, [](auto &&nv) { return nv.name.starts_with(':'); });
 
@@ -2798,18 +2802,15 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
       }
       *name_end = 0;
-      auto value = name_end + 1;
-      while (isspace(*value)) {
-        value++;
-      }
-      if (*value == 0) {
-        // This could also be a valid case for suppressing a header
-        // similar to curl
-        std::cerr << "-H: invalid header - value missing: " << optarg
-                  << std::endl;
-        exit(EXIT_FAILURE);
-      }
       util::tolower(header, name_end, header);
+      auto value = name_end + 1;
+      if (isspace(*value)) {
+        do { value++; } while (isspace(*value));
+        if (!*value) {
+          config.headers.emplace_back(header, " ", false);
+          break;
+        }
+      }
       config.headers.emplace_back(header, value, false);
       break;
     }
